@@ -258,6 +258,8 @@ class DocumentRenderer extends DocumentRendererBase {
           context: instance.$context
         };
 
+        var hooks = {};
+
         this._componentElements[id] = element;
 
         var startTime = hrTimeHelper.get();
@@ -281,7 +283,13 @@ class DocumentRenderer extends DocumentRendererBase {
             var renderMethod = moduleHelper.getMethodToInvoke(instance, 'render');
             return moduleHelper.getSafePromise(renderMethod);
           })
-          .then(dataContext => component.template.render(dataContext))
+          .then(dataContext => {
+            if (instance.getHooks) {
+              hooks = instance.getHooks(dataContext);
+            }
+
+            return component.template.render(dataContext);
+          })
           .catch(reason => this._handleRenderError(element, component, reason))
           .then(html => {
             var isHead = element.tagName === TAG_NAMES.HEAD;
@@ -296,15 +304,15 @@ class DocumentRenderer extends DocumentRendererBase {
               return Promise.resolve();
             }
 
-            morphdom(element, tmpElement, {
-              onBeforeMorphElChildren: foundElement => {
-                return foundElement === element ||
-                  !this._isComponent(
-                    renderingContext.components,
-                    foundElement
-                  );
-              }
-            });
+            hooks.onBeforeMorphElChildren = (foundElement) => {
+              return foundElement === element ||
+                !this._isComponent(
+                  renderingContext.components,
+                  foundElement
+                );
+            };
+
+            morphdom(element, tmpElement, hooks);
 
             var promises = this._findComponents(element, renderingContext.components, false)
               .map(innerComponent => this.renderComponent(innerComponent, renderingContext));
